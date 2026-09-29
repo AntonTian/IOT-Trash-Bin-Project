@@ -1,382 +1,270 @@
-// #include <Arduino.h>
-// #include <WiFiManager.h>
-// #include <PubSubClient.h>
-// #include <ESP32Servo.h>
-
-// // --- Pin Definitions ---
-// const int trigPin = 19;
-// const int echoPin = 18;
-// const int servoPin = 21;
-// Servo myServo;
-
-// // --- MQTT Settings ---
-// // Using HiveMQ's free public broker
-// const char *mqtt_server = "broker.hivemq.com";
-// const int mqtt_port = 1883;
-
-// // Change "my_unique_esp32_123" to something unique so you don't conflict with others
-// const char *topic_pub_distance = "my_unique_esp32_123/distance";
-// const char *topic_sub_override = "my_unique_esp32_123/servo_override";
-
-// WiFiClient espClient;
-// PubSubClient client(espClient);
-
-// // --- Timing and State Variables ---
-// unsigned long overrideEndTime = 0;
-// bool isOverrideActive = false;
-// unsigned long lastPublishTime = 0;
-// const long publishInterval = 1000; // Publish distance every 1 second
-
-// // Function to calculate distance
-// float getDistance(int trigPin, int echoPin)
-// {
-//   digitalWrite(trigPin, LOW);
-//   delayMicroseconds(2);
-
-//   digitalWrite(trigPin, HIGH);
-//   delayMicroseconds(10);
-//   digitalWrite(trigPin, LOW);
-
-//   // Added a 30,000 microsecond timeout so it doesn't block MQTT if nothing is detected
-//   long duration = pulseIn(echoPin, HIGH, 30000);
-//   if (duration == 0)
-//     return 0; // Timeout
-
-//   float distance = duration * 0.034 / 2;
-//   return distance;
-// }
-
-// // Callback function executed when an MQTT message is received
-// void mqttCallback(char *topic, byte *payload, unsigned int length)
-// {
-//   String messageTemp;
-//   for (unsigned int i = 0; i < length; i++)
-//   {
-//     messageTemp += (char)payload[i];
-//   }
-
-//   Serial.print("MQTT Override Command Received: ");
-//   Serial.println(messageTemp);
-
-//   // Convert the received message string to an integer angle
-//   int targetAngle = messageTemp.toInt();
-//   targetAngle = constrain(targetAngle, 0, 180);
-
-//   // Move the servo to the override angle
-//   myServo.write(targetAngle);
-
-//   // Activate the override state for the next 3 seconds (3000 milliseconds)
-//   isOverrideActive = true;
-//   overrideEndTime = millis() + 3000;
-// }
-
-// // Function to reconnect to MQTT broker if connection is lost
-// void reconnectMQTT()
-// {
-//   while (!client.connected())
-//   {
-//     Serial.print("Attempting MQTT connection...");
-//     // Create a random client ID
-//     String clientId = "ESP32Client-";
-//     clientId += String(random(0xffff), HEX);
-
-//     if (client.connect(clientId.c_str()))
-//     {
-//       Serial.println("Connected to MQTT Broker!");
-//       // Subscribe to the override command topic
-//       client.subscribe(topic_sub_override);
-//     }
-//     else
-//     {
-//       Serial.print("failed, rc=");
-//       Serial.print(client.state());
-//       Serial.println(" try again in 5 seconds");
-//       delay(5000);
-//     }
-//   }
-// }
-
-// void setup()
-// {
-//   Serial.begin(115200);
-
-//   pinMode(trigPin, OUTPUT);
-//   pinMode(echoPin, INPUT);
-
-//   myServo.setPeriodHertz(50);
-//   myServo.attach(servoPin, 500, 2400);
-
-//   // --- WiFiManager Setup ---
-//   WiFiManager wm;
-//   // wm.resetSettings(); // Uncomment to wipe saved WiFi credentials for testing
-
-//   Serial.println("Connecting to WiFi via WiFiManager...");
-//   // Creates an Access Point named "ESP32_Setup". Connect to it with your phone to configure WiFi.
-//   bool res = wm.autoConnect("ESP32_Setup");
-
-//   if (!res)
-//   {
-//     Serial.println("Failed to connect to WiFi");
-//     ESP.restart();
-//   }
-//   Serial.println("WiFi connected successfully!");
-
-//   // --- MQTT Setup ---
-//   client.setServer(mqtt_server, mqtt_port);
-//   client.setCallback(mqttCallback);
-// }
-
-// void loop()
-// {
-//   // Ensure MQTT remains connected
-//   if (!client.connected())
-//   {
-//     reconnectMQTT();
-//   }
-//   client.loop(); // Process incoming MQTT messages
-
-//   unsigned long currentMillis = millis();
-
-//   // Check if the 3-second override period has expired
-//   if (isOverrideActive && currentMillis > overrideEndTime)
-//   {
-//     isOverrideActive = false;
-//     Serial.println("Override finished. Returning to automatic mode.");
-//   }
-
-//   // Get distance
-//   float distance = getDistance(trigPin, echoPin);
-//   if (distance < 0)
-//     distance = 0;
-
-//   // Publish distance to MQTT every 1 second (to avoid spamming the free broker)
-//   if (currentMillis - lastPublishTime >= publishInterval)
-//   {
-//     lastPublishTime = currentMillis;
-//     String distString = String(distance, 2);
-//     client.publish(topic_pub_distance, distString.c_str());
-//   }
-
-//   // --- Automatic Servo Logic (Only runs if Override is NOT active) ---
-//   if (!isOverrideActive)
-//   {
-//     int servoAngle;
-
-//     // Less than 10 cm -> Clockwise (180), Else -> Counter-Clockwise (0)
-//     if (distance > 0 && distance < 10.0)
-//     {
-//       servoAngle = 180;
-//     }
-//     else
-//     {
-//       servoAngle = 0;
-//     }
-
-//     myServo.write(servoAngle);
-//   }
-
-//   delay(50); // Small delay for stability
-// }
-
 #include <Arduino.h>
 #include <WiFiManager.h>
 #include <PubSubClient.h>
 #include <ESP32Servo.h>
 
-// --- Pin Definitions ---
-const int trigPin = 19;
-const int echoPin = 18;
+// ==========================================
+// 1. PENGATURAN PIN (Hanya 2 Sensor)
+// ==========================================
+// Sensor 1: Deteksi Tangan (Mengendalikan Servo)
+const int trigPinHand = 19;
+const int echoPinHand = 18;
+
+// Sensor 2: Deteksi Kapasitas Tong (Mengendalikan LED & MQTT)
+const int trigPinBin = 17;
+const int echoPinBin = 16;
+
+// Pin Komponen Lainnya
 const int servoPin = 21;
+const int ledRed = 13; // Pin 13 dan 14 ditukar agar warna sesuai
+const int ledGreen = 12;
+const int ledBlue = 14;
 
-// Pin LED Baru
-const int ledRed = 5;    // Lampu R
-const int ledYellow = 23; // Lampu Y
-const int ledGreen = 22;  // Lampu G
+Servo binServo;
 
-Servo myServo;
+// ==========================================
+// 2. PENGATURAN SERVO CONTINUOUS (MG996R)
+// ==========================================
+const int SLOW_OPEN_SPEED = 0;    // Kecepatan menggulung tali
+const int SLOW_CLOSE_SPEED = 180; // Kecepatan mengulur tali
+const int STOP_MOTOR = 90;        // Berhenti
 
-// --- MQTT Settings ---
-const char *mqtt_server = "broker.hivemq.com";
+const int SPIN_TIME = 1500; // Durasi putaran (ms) untuk membuka/menutup
+const int HOLD_TIME = 1500; // Durasi tutup terbuka (ms)
+
+// State Machine untuk Servo Continuous
+enum BinState
+{
+  CLOSED,
+  OPENING,
+  OPEN,
+  CLOSING
+};
+BinState binState = CLOSED;
+unsigned long actionTimestamp = 0;
+
+// Variabel Penghitung (Counter)
+int openCounter = 0;
+
+// ==========================================
+// 3. PENGATURAN MQTT ADAFRUIT IO
+// ==========================================
+const char *mqtt_server = "io.adafruit.com";
 const int mqtt_port = 1883;
 
-const char *topic_pub_distance = "my_unique_esp32_123/distance";
-const char *topic_sub_override = "my_unique_esp32_123/servo_override";
+// --- KREDENSIAL ADAFRUIT IO ---
+const char *io_username = "YOUR_USERNAME";
+const char *io_key = "YOUR_SECRET_KEY";
+
+const char *topic_capacity = "YOUR_USERNAME/feeds/smartbin-capacity";
+const char *topic_opens = "YOUR_USERNAME/feeds/smartbin-opens";
 
 WiFiClient espClient;
 PubSubClient client(espClient);
 
-// --- Timing and State Variables ---
-unsigned long overrideEndTime = 0;
-bool isOverrideActive = false;
-unsigned long lastPublishTime = 0;
-const long publishInterval = 1000; 
+// Batas Jarak
+const float DISTANCE_HAND_OPEN = 15.0;
+const float BIN_DEPTH_MAX = 23.61;
+const float BIN_FULL_THRESHOLD = 3.0;
 
-// Function to calculate distance
+unsigned long lastPublishTime = 0;
+const long publishInterval = 5000;
+
+// ==========================================
+// 4. FUNGSI PENDUKUNG
+// ==========================================
 float getDistance(int trigPin, int echoPin)
 {
   digitalWrite(trigPin, LOW);
   delayMicroseconds(2);
-
   digitalWrite(trigPin, HIGH);
   delayMicroseconds(10);
   digitalWrite(trigPin, LOW);
 
-  long duration = pulseIn(echoPin, HIGH, 30000);
+  long duration = pulseIn(echoPin, HIGH, 30000); // 30ms timeout
   if (duration == 0)
-    return 0; // Timeout
-
-  float distance = duration * 0.034 / 2;
-  return distance;
+    return 0;
+  return duration * 0.034 / 2;
 }
 
-void mqttCallback(char *topic, byte *payload, unsigned int length)
+void setLedColor(int r, int g, int b)
 {
-  String messageTemp;
-  for (unsigned int i = 0; i < length; i++)
-  {
-    messageTemp += (char)payload[i];
-  }
-
-  Serial.print("MQTT Override Command Received: ");
-  Serial.println(messageTemp);
-
-  int targetAngle = messageTemp.toInt();
-  targetAngle = constrain(targetAngle, 0, 180);
-  myServo.write(targetAngle);
-
-  isOverrideActive = true;
-  overrideEndTime = millis() + 3000;
+  digitalWrite(ledRed, r);
+  digitalWrite(ledGreen, g);
+  digitalWrite(ledBlue, b);
 }
 
 void reconnectMQTT()
 {
   while (!client.connected())
   {
-    Serial.print("Attempting MQTT connection...");
-    String clientId = "ESP32Client-";
-    clientId += String(random(0xffff), HEX);
+    Serial.print("Menghubungkan ke Adafruit IO...");
+    String clientId = "ESP32-" + String(random(0xffff), HEX);
 
-    if (client.connect(clientId.c_str()))
+    if (client.connect(clientId.c_str(), io_username, io_key))
     {
-      Serial.println("Connected to MQTT Broker!");
-      client.subscribe(topic_sub_override);
+      Serial.println("Berhasil!");
     }
     else
     {
-      Serial.print("failed, rc=");
+      Serial.print("Gagal, rc=");
       Serial.print(client.state());
-      Serial.println(" try again in 5 seconds");
+      Serial.println(" coba lagi dalam 5 detik");
       delay(5000);
     }
   }
 }
 
+// ==========================================
+// 5. SETUP
+// ==========================================
 void setup()
 {
   Serial.begin(115200);
 
-  // Set pin mode untuk Ultrasonik
-  pinMode(trigPin, OUTPUT);
-  pinMode(echoPin, INPUT);
+  // Inisialisasi Pin Sensor
+  pinMode(trigPinHand, OUTPUT);
+  pinMode(echoPinHand, INPUT);
+  pinMode(trigPinBin, OUTPUT);
+  pinMode(echoPinBin, INPUT);
 
-  // Set pin mode untuk LED
+  // Inisialisasi LED
   pinMode(ledRed, OUTPUT);
-  pinMode(ledYellow, OUTPUT);
   pinMode(ledGreen, OUTPUT);
+  pinMode(ledBlue, OUTPUT);
+  setLedColor(0, 1, 0); // Default ke Hijau saat menyala
 
-  // Pastikan semua LED mati saat pertama kali nyala
-  digitalWrite(ledRed, LOW);
-  digitalWrite(ledYellow, LOW);
-  digitalWrite(ledGreen, LOW);
+  // Inisialisasi Servo
+  binServo.setPeriodHertz(50);
+  binServo.attach(servoPin, 500, 2400);
+  binServo.write(STOP_MOTOR);
 
-  myServo.setPeriodHertz(50);
-  myServo.attach(servoPin, 500, 2400);
-
-  // --- WiFiManager Setup ---
+  // Inisialisasi WiFi
   WiFiManager wm;
-  Serial.println("Connecting to WiFi via WiFiManager...");
-  bool res = wm.autoConnect("ESP32_Setup");
-
-  if (!res)
+  Serial.println("Memulai WiFiManager...");
+  if (!wm.autoConnect("SmartBin_Setup"))
   {
-    Serial.println("Failed to connect to WiFi");
+    Serial.println("Gagal terhubung ke WiFi");
     ESP.restart();
   }
-  Serial.println("WiFi connected successfully!");
+  Serial.println("WiFi Terhubung!");
 
-  // --- MQTT Setup ---
   client.setServer(mqtt_server, mqtt_port);
-  client.setCallback(mqttCallback);
 }
 
+// ==========================================
+// 6. LOOP UTAMA
+// ==========================================
 void loop()
 {
   if (!client.connected())
-  {
     reconnectMQTT();
-  }
-  client.loop(); 
 
+  client.loop();
   unsigned long currentMillis = millis();
 
-  if (isOverrideActive && currentMillis > overrideEndTime)
+  // Baca sensor tangan (D19 & D18) untuk Servo
+  float handDistance = getDistance(trigPinHand, echoPinHand);
+  if (handDistance < 0)
+    handDistance = 0;
+
+  delay(5); // Jeda kecil agar sinyal ultrasonik tidak bertabrakan (cross-talk)
+
+  // Baca sensor kapasitas (D17 & D16)
+  float capacityDistance = getDistance(trigPinBin, echoPinBin);
+  if (capacityDistance < 0)
+    capacityDistance = 0;
+
+  // --- MENGHITUNG PERSENTASE KAPASITAS (Real-time) ---
+  float percentage = 0;
+  if (capacityDistance > 0 && capacityDistance <= BIN_DEPTH_MAX)
   {
-    isOverrideActive = false;
-    Serial.println("Override finished. Returning to automatic mode.");
+    percentage = ((BIN_DEPTH_MAX - capacityDistance) / (BIN_DEPTH_MAX - BIN_FULL_THRESHOLD)) * 100.0;
+    if (percentage > 100)
+      percentage = 100;
+    if (percentage < 0)
+      percentage = 0;
   }
 
-  // Ambil data jarak
-  float distance = getDistance(trigPin, echoPin);
-  if (distance < 0) distance = 0;
+  // --- 1. LOGIKA INDIKATOR LED KAPASITAS (Berdasarkan Persentase) ---
+  if (percentage >= 85.0)
+  {
+    setLedColor(1, 0, 0); // Merah (Penuh: >= 85%)
+  }
+  else if (percentage <= 10.0)
+  {
+    setLedColor(0, 1, 0); // Hijau (Aman/Kosong: <= 10%)
+  }
+  else
+  {
+    setLedColor(1, 1, 0); // Kuning (Antara 10% dan 85%)
+  }
 
-  // Publish ke MQTT
+  // --- 2. LOGIKA SERVO CONTINUOUS (NON-BLOCKING) ---
+  if (handDistance > 0 && handDistance <= DISTANCE_HAND_OPEN && binState == CLOSED)
+  {
+    binState = OPENING;
+    binServo.write(SLOW_OPEN_SPEED); // Mulai menggulung
+    actionTimestamp = currentMillis;
+
+    openCounter++;
+    Serial.print("Tempat Sampah Dibuka! (Total buka: ");
+    Serial.print(openCounter);
+    Serial.println(" kali)");
+
+    client.publish(topic_opens, String(openCounter).c_str());
+  }
+
+  if (binState == OPENING)
+  {
+    if (currentMillis - actionTimestamp >= SPIN_TIME)
+    {
+      binServo.write(STOP_MOTOR);
+      binState = OPEN;
+      actionTimestamp = currentMillis;
+      Serial.println("Tutup terbuka. Menunggu...");
+    }
+  }
+  else if (binState == OPEN)
+  {
+    if (currentMillis - actionTimestamp >= HOLD_TIME)
+    {
+      if (handDistance > 0 && handDistance <= DISTANCE_HAND_OPEN)
+      {
+        actionTimestamp = currentMillis;
+      }
+      else
+      {
+        binState = CLOSING;
+        binServo.write(SLOW_CLOSE_SPEED);
+        actionTimestamp = currentMillis;
+        Serial.println("Waktu habis. Menutup perlahan...");
+      }
+    }
+  }
+  else if (binState == CLOSING)
+  {
+    if (currentMillis - actionTimestamp >= SPIN_TIME)
+    {
+      binServo.write(STOP_MOTOR);
+      binState = CLOSED;
+      Serial.println("Tempat Sampah Ditutup sepenuhnya.");
+    }
+  }
+
+  // --- 3. LOGIKA MQTT KAPASITAS (Publish setiap 5 detik) ---
   if (currentMillis - lastPublishTime >= publishInterval)
   {
     lastPublishTime = currentMillis;
-    String distString = String(distance, 2);
-    client.publish(topic_pub_distance, distString.c_str());
+
+    // Menampilkan Jarak (cm) dan Persentase (%) di Serial Monitor
+    Serial.print("Jarak Sampah: ");
+    Serial.print(capacityDistance);
+    Serial.print(" cm | ");
+    Serial.printf("Kapasitas: %.1f%%\n", percentage);
+
+    client.publish(topic_capacity, String(percentage, 1).c_str());
   }
 
-  // --- LOGIKA LAMPU LED BERDASARKAN JARAK ---
-  if (distance > 0 && distance <= 10.0) {
-    // Kurang dari sama dengan 10cm: MERAH NYALA
-    digitalWrite(ledRed, HIGH);
-    digitalWrite(ledYellow, LOW);
-    digitalWrite(ledGreen, LOW);
-  } 
-  else if (distance > 10.0 && distance <= 15.0) {
-    // 11cm - 15cm: KUNING NYALA
-    digitalWrite(ledRed, LOW);
-    digitalWrite(ledYellow, HIGH);
-    digitalWrite(ledGreen, LOW);
-  } 
-  else if (distance > 15.0 && distance <= 20.0) {
-    // 16cm - 20cm: HIJAU NYALA
-    digitalWrite(ledRed, LOW);
-    digitalWrite(ledYellow, LOW);
-    digitalWrite(ledGreen, HIGH);
-  } 
-  else {
-    // Lebih dari 20cm atau error (0): SEMUA MATI
-    digitalWrite(ledRed, LOW);
-    digitalWrite(ledYellow, LOW);
-    digitalWrite(ledGreen, LOW);
-  }
-
-  // --- Automatic Servo Logic ---
-  if (!isOverrideActive)
-  {
-    int servoAngle;
-    if (distance > 0 && distance < 10.0)
-    {
-      servoAngle = 180; // Buka tutup jika < 10cm
-    }
-    else
-    {
-      servoAngle = 0; // Tutup kembali
-    }
-    myServo.write(servoAngle);
-  }
-
-  delay(50); 
+  delay(20);
 }
