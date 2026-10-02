@@ -34,10 +34,10 @@ int openCounter = 0;
 
 const char *mqtt_server = "io.adafruit.com";
 const int mqtt_port = 1883;
-const char *io_username = "YOUR_USERNAME";
-const char *io_key = "YOUR_SECRET_KEY";
-const char *topic_capacity = "YOUR_USERNAME/feeds/smartbin-capacity";
-const char *topic_opens = "YOUR_USERNAME/feeds/smartbin-opens";
+// const char *io_username = "-";
+// const char *io_key = "-";
+// const char *topic_capacity = "-/feeds/smartbin-capacity";
+// const char *topic_opens = "-/feeds/smartbin-opens";
 
 WiFiClient espClient;
 PubSubClient client(espClient);
