@@ -165,11 +165,11 @@ void loop()
   }
   else if (percentage <= 10.0)
   {
-    setLedColor(0, 1, 0); // kuning = terisi
+    setLedColor(0, 1, 0); // hijau = sedikit terisi / kosong
   }
   else
   {
-    setLedColor(1, 1, 0); // hijau = sedikit terisi / kosong
+    setLedColor(1, 1, 0); // kuning = terisi
   }
 
   // kondisi pada buka tutupnya tempat sampah
