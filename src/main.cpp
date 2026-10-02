@@ -22,7 +22,7 @@ const int STOP_MOTOR = 90;
 const int SPIN_TIME = 1500;
 const int HOLD_TIME = 1500;
 
-// Variabel tatus tempat sampah
+// Variabel status tempat sampah
 enum BinState
 {
   CLOSED,
