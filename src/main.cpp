@@ -3,6 +3,7 @@
 #include <PubSubClient.h>
 #include <ESP32Servo.h>
 
+// Nomor pin yang digunakan
 const int trigPinHand = 19;
 const int echoPinHand = 18;
 const int trigPinBin = 17;
@@ -14,12 +15,14 @@ const int ledBlue = 14;
 
 Servo binServo;
 
+// Konfigurasi kecepatan servo
 const int SLOW_OPEN_SPEED = 0;
 const int SLOW_CLOSE_SPEED = 180;
 const int STOP_MOTOR = 90;
 const int SPIN_TIME = 1500;
 const int HOLD_TIME = 1500;
 
+// Variabel tatus tempat sampah
 enum BinState
 {
   CLOSED,
@@ -32,16 +35,18 @@ BinState binState = CLOSED;
 unsigned long actionTimestamp = 0;
 int openCounter = 0;
 
+// MQTT (Adafruit IO)
 const char *mqtt_server = "io.adafruit.com";
 const int mqtt_port = 1883;
-// const char *io_username = "-";
-// const char *io_key = "-";
-// const char *topic_capacity = "-/feeds/smartbin-capacity";
-// const char *topic_opens = "-/feeds/smartbin-opens";
+const char *io_username = "-";
+const char *io_key = "-";
+const char *topic_capacity = "-/feeds/smartbin-capacity";
+const char *topic_opens = "-/feeds/smartbin-opens";
 
 WiFiClient espClient;
 PubSubClient client(espClient);
 
+// threshold sensor ultrasonik
 const float DISTANCE_HAND_OPEN = 15.0;
 const float BIN_DEPTH_MAX = 23.61;
 const float BIN_FULL_THRESHOLD = 3.0;
@@ -49,6 +54,7 @@ const float BIN_FULL_THRESHOLD = 3.0;
 unsigned long lastPublishTime = 0;
 const long publishInterval = 5000;
 
+// function get distance sensor ultrasonik (dalam cm)
 float getDistance(int trigPin, int echoPin)
 {
   digitalWrite(trigPin, LOW);
@@ -63,6 +69,7 @@ float getDistance(int trigPin, int echoPin)
   return duration * 0.034 / 2;
 }
 
+// warna lampu LED
 void setLedColor(int r, int g, int b)
 {
   digitalWrite(ledRed, r);
@@ -70,6 +77,7 @@ void setLedColor(int r, int g, int b)
   digitalWrite(ledBlue, b);
 }
 
+// koneksi ke mqtt
 void reconnectMQTT()
 {
   while (!client.connected())
@@ -91,6 +99,7 @@ void reconnectMQTT()
   }
 }
 
+// Main function
 void setup()
 {
   Serial.begin(115200);
@@ -102,7 +111,7 @@ void setup()
   pinMode(ledRed, OUTPUT);
   pinMode(ledGreen, OUTPUT);
   pinMode(ledBlue, OUTPUT);
-  setLedColor(0, 1, 0);
+  setLedColor(0, 1, 0); // default warna hijau saat mulai
 
   binServo.setPeriodHertz(50);
   binServo.attach(servoPin, 500, 2400);
@@ -128,12 +137,14 @@ void loop()
   client.loop();
   unsigned long currentMillis = millis();
 
+  // pembacaan distance pada sensor
   float handDistance = getDistance(trigPinHand, echoPinHand);
   if (handDistance < 0)
     handDistance = 0;
 
   delay(5);
 
+  // menghitung kapasitas dan update warna lampu LED
   float capacityDistance = getDistance(trigPinBin, echoPinBin);
   if (capacityDistance < 0)
     capacityDistance = 0;
@@ -150,17 +161,18 @@ void loop()
 
   if (percentage >= 85.0)
   {
-    setLedColor(1, 0, 0);
+    setLedColor(1, 0, 0); // merah = full
   }
   else if (percentage <= 10.0)
   {
-    setLedColor(0, 1, 0);
+    setLedColor(0, 1, 0); // kuning = terisi
   }
   else
   {
-    setLedColor(1, 1, 0);
+    setLedColor(1, 1, 0); // hijau = sedikit terisi / kosong
   }
 
+  // kondisi pada buka tutupnya tempat sampah
   if (handDistance > 0 && handDistance <= DISTANCE_HAND_OPEN && binState == CLOSED)
   {
     binState = OPENING;
@@ -213,6 +225,7 @@ void loop()
     }
   }
 
+  // publish log jarak sampah dan kapastias
   if (currentMillis - lastPublishTime >= publishInterval)
   {
     lastPublishTime = currentMillis;
