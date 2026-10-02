@@ -3,36 +3,23 @@
 #include <PubSubClient.h>
 #include <ESP32Servo.h>
 
-// ==========================================
-// 1. PENGATURAN PIN (Hanya 2 Sensor)
-// ==========================================
-// Sensor 1: Deteksi Tangan (Mengendalikan Servo)
 const int trigPinHand = 19;
 const int echoPinHand = 18;
-
-// Sensor 2: Deteksi Kapasitas Tong (Mengendalikan LED & MQTT)
 const int trigPinBin = 17;
 const int echoPinBin = 16;
-
-// Pin Komponen Lainnya
 const int servoPin = 21;
-const int ledRed = 13; // Pin 13 dan 14 ditukar agar warna sesuai
+const int ledRed = 13;
 const int ledGreen = 12;
 const int ledBlue = 14;
 
 Servo binServo;
 
-// ==========================================
-// 2. PENGATURAN SERVO CONTINUOUS (MG996R)
-// ==========================================
-const int SLOW_OPEN_SPEED = 0;    // Kecepatan menggulung tali
-const int SLOW_CLOSE_SPEED = 180; // Kecepatan mengulur tali
-const int STOP_MOTOR = 90;        // Berhenti
+const int SLOW_OPEN_SPEED = 0;
+const int SLOW_CLOSE_SPEED = 180;
+const int STOP_MOTOR = 90;
+const int SPIN_TIME = 1500;
+const int HOLD_TIME = 1500;
 
-const int SPIN_TIME = 1500; // Durasi putaran (ms) untuk membuka/menutup
-const int HOLD_TIME = 1500; // Durasi tutup terbuka (ms)
-
-// State Machine untuk Servo Continuous
 enum BinState
 {
   CLOSED,
@@ -40,29 +27,21 @@ enum BinState
   OPEN,
   CLOSING
 };
+
 BinState binState = CLOSED;
 unsigned long actionTimestamp = 0;
-
-// Variabel Penghitung (Counter)
 int openCounter = 0;
 
-// ==========================================
-// 3. PENGATURAN MQTT ADAFRUIT IO
-// ==========================================
 const char *mqtt_server = "io.adafruit.com";
 const int mqtt_port = 1883;
-
-// --- KREDENSIAL ADAFRUIT IO ---
 const char *io_username = "YOUR_USERNAME";
 const char *io_key = "YOUR_SECRET_KEY";
-
 const char *topic_capacity = "YOUR_USERNAME/feeds/smartbin-capacity";
 const char *topic_opens = "YOUR_USERNAME/feeds/smartbin-opens";
 
 WiFiClient espClient;
 PubSubClient client(espClient);
 
-// Batas Jarak
 const float DISTANCE_HAND_OPEN = 15.0;
 const float BIN_DEPTH_MAX = 23.61;
 const float BIN_FULL_THRESHOLD = 3.0;
@@ -70,9 +49,6 @@ const float BIN_FULL_THRESHOLD = 3.0;
 unsigned long lastPublishTime = 0;
 const long publishInterval = 5000;
 
-// ==========================================
-// 4. FUNGSI PENDUKUNG
-// ==========================================
 float getDistance(int trigPin, int echoPin)
 {
   digitalWrite(trigPin, LOW);
@@ -81,7 +57,7 @@ float getDistance(int trigPin, int echoPin)
   delayMicroseconds(10);
   digitalWrite(trigPin, LOW);
 
-  long duration = pulseIn(echoPin, HIGH, 30000); // 30ms timeout
+  long duration = pulseIn(echoPin, HIGH, 30000);
   if (duration == 0)
     return 0;
   return duration * 0.034 / 2;
@@ -115,31 +91,23 @@ void reconnectMQTT()
   }
 }
 
-// ==========================================
-// 5. SETUP
-// ==========================================
 void setup()
 {
   Serial.begin(115200);
 
-  // Inisialisasi Pin Sensor
   pinMode(trigPinHand, OUTPUT);
   pinMode(echoPinHand, INPUT);
   pinMode(trigPinBin, OUTPUT);
   pinMode(echoPinBin, INPUT);
-
-  // Inisialisasi LED
   pinMode(ledRed, OUTPUT);
   pinMode(ledGreen, OUTPUT);
   pinMode(ledBlue, OUTPUT);
-  setLedColor(0, 1, 0); // Default ke Hijau saat menyala
+  setLedColor(0, 1, 0);
 
-  // Inisialisasi Servo
   binServo.setPeriodHertz(50);
   binServo.attach(servoPin, 500, 2400);
   binServo.write(STOP_MOTOR);
 
-  // Inisialisasi WiFi
   WiFiManager wm;
   Serial.println("Memulai WiFiManager...");
   if (!wm.autoConnect("SmartBin_Setup"))
@@ -152,9 +120,6 @@ void setup()
   client.setServer(mqtt_server, mqtt_port);
 }
 
-// ==========================================
-// 6. LOOP UTAMA
-// ==========================================
 void loop()
 {
   if (!client.connected())
@@ -163,19 +128,16 @@ void loop()
   client.loop();
   unsigned long currentMillis = millis();
 
-  // Baca sensor tangan (D19 & D18) untuk Servo
   float handDistance = getDistance(trigPinHand, echoPinHand);
   if (handDistance < 0)
     handDistance = 0;
 
-  delay(5); // Jeda kecil agar sinyal ultrasonik tidak bertabrakan (cross-talk)
+  delay(5);
 
-  // Baca sensor kapasitas (D17 & D16)
   float capacityDistance = getDistance(trigPinBin, echoPinBin);
   if (capacityDistance < 0)
     capacityDistance = 0;
 
-  // --- MENGHITUNG PERSENTASE KAPASITAS (Real-time) ---
   float percentage = 0;
   if (capacityDistance > 0 && capacityDistance <= BIN_DEPTH_MAX)
   {
@@ -186,25 +148,23 @@ void loop()
       percentage = 0;
   }
 
-  // --- 1. LOGIKA INDIKATOR LED KAPASITAS (Berdasarkan Persentase) ---
   if (percentage >= 85.0)
   {
-    setLedColor(1, 0, 0); // Merah (Penuh: >= 85%)
+    setLedColor(1, 0, 0);
   }
   else if (percentage <= 10.0)
   {
-    setLedColor(0, 1, 0); // Hijau (Aman/Kosong: <= 10%)
+    setLedColor(0, 1, 0);
   }
   else
   {
-    setLedColor(1, 1, 0); // Kuning (Antara 10% dan 85%)
+    setLedColor(1, 1, 0);
   }
 
-  // --- 2. LOGIKA SERVO CONTINUOUS (NON-BLOCKING) ---
   if (handDistance > 0 && handDistance <= DISTANCE_HAND_OPEN && binState == CLOSED)
   {
     binState = OPENING;
-    binServo.write(SLOW_OPEN_SPEED); // Mulai menggulung
+    binServo.write(SLOW_OPEN_SPEED);
     actionTimestamp = currentMillis;
 
     openCounter++;
@@ -225,6 +185,7 @@ void loop()
       Serial.println("Tutup terbuka. Menunggu...");
     }
   }
+
   else if (binState == OPEN)
   {
     if (currentMillis - actionTimestamp >= HOLD_TIME)
@@ -252,12 +213,9 @@ void loop()
     }
   }
 
-  // --- 3. LOGIKA MQTT KAPASITAS (Publish setiap 5 detik) ---
   if (currentMillis - lastPublishTime >= publishInterval)
   {
     lastPublishTime = currentMillis;
-
-    // Menampilkan Jarak (cm) dan Persentase (%) di Serial Monitor
     Serial.print("Jarak Sampah: ");
     Serial.print(capacityDistance);
     Serial.print(" cm | ");
