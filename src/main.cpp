@@ -1,6 +1,13 @@
+// Blynk Credentials
+#define BLYNK_TEMPLATE_ID "-"
+#define BLYNK_TEMPLATE_NAME "-"
+#define BLYNK_AUTH_TOKEN "-"
+#define BLYNK_PRINT Serial
+
 #include <Arduino.h>
+#include <WiFi.h>
 #include <WiFiManager.h>
-#include <PubSubClient.h>
+#include <BlynkSimpleEsp32.h>
 #include <ESP32Servo.h>
 
 // Nomor pin yang digunakan
@@ -23,7 +30,6 @@ const int STOP_MOTOR = 90;
 const int SPIN_TIME = 1500;
 const int HOLD_TIME = 1500;
 
-// Variabel status tempat sampah
 enum BinState
 {
   CLOSED,
@@ -31,8 +37,8 @@ enum BinState
   OPEN,
   CLOSING
 };
-
 BinState binState = CLOSED;
+
 unsigned long actionTimestamp = 0;
 int openCounter = 0;
 
@@ -41,18 +47,6 @@ int buttonState = HIGH;
 int lastFlickerableState = HIGH;
 unsigned long lastDebounceTime = 0;
 const unsigned long debounceDelay = 50;
-
-// MQTT (Adafruit IO)
-const char *mqtt_server = "io.adafruit.com";
-const int mqtt_port = 1883;
-const char *io_username = "-";
-const char *io_key = "-";
-const char *topic_capacity = "-/feeds/smartbin-capacity";
-const char *topic_opens = "-/feeds/smartbin-opens";
-const char *topic_pickup = "-/feeds/smartbin-pickup";
-
-WiFiClient espClient;
-PubSubClient client(espClient);
 
 // threshold sensor ultrasonik
 const float DISTANCE_HAND_OPEN = 15.0;
@@ -79,7 +73,7 @@ float getDistance(int trigPin, int echoPin)
   return duration * 0.034 / 2;
 }
 
-// clean distance function
+// clean distance function (Median Filter)
 float getCleanDistanceCm(int trigPin, int echoPin)
 {
   const int NUM_SAMPLES = 7;
@@ -94,7 +88,6 @@ float getCleanDistanceCm(int trigPin, int echoPin)
     digitalWrite(trigPin, LOW);
 
     long duration = pulseIn(echoPin, HIGH, 30000);
-
     if (duration == 0)
     {
       readings[i] = 999.0;
@@ -129,28 +122,6 @@ void setLedColor(int r, int g, int b)
   digitalWrite(ledBlue, b);
 }
 
-// koneksi ke mqtt
-void reconnectMQTT()
-{
-  while (!client.connected())
-  {
-    Serial.print("Menghubungkan ke Adafruit IO...");
-    String clientId = "ESP32-" + String(random(0xffff), HEX);
-
-    if (client.connect(clientId.c_str(), io_username, io_key))
-    {
-      Serial.println("Berhasil!");
-    }
-    else
-    {
-      Serial.print("Gagal, rc=");
-      Serial.print(client.state());
-      Serial.println(" coba lagi dalam 5 detik");
-      delay(5000);
-    }
-  }
-}
-
 // Pickup button function
 void checkPickupButton()
 {
@@ -175,9 +146,11 @@ void checkPickupButton()
         percentage = 0.0;
         setLedColor(0, 1, 0);
 
-        client.publish(topic_pickup, "1");
+        Blynk.virtualWrite(V3, 1);
+        Blynk.virtualWrite(V1, 0.0);
 
-        client.publish(topic_capacity, "0.0");
+        delay(100);
+        Blynk.virtualWrite(V3, 0);
       }
     }
   }
@@ -211,15 +184,14 @@ void setup()
   }
   Serial.println("WiFi Terhubung!");
 
-  client.setServer(mqtt_server, mqtt_port);
+  Blynk.config(BLYNK_AUTH_TOKEN);
+  Blynk.connect();
 }
 
 void loop()
 {
-  if (!client.connected())
-    reconnectMQTT();
+  Blynk.run();
 
-  client.loop();
   unsigned long currentMillis = millis();
 
   // Pickup button logic
@@ -241,7 +213,7 @@ void loop()
     Serial.print(openCounter);
     Serial.println(" kali)");
 
-    client.publish(topic_opens, String(openCounter).c_str());
+    Blynk.virtualWrite(V2, openCounter);
   }
 
   if (binState == OPENING)
@@ -254,7 +226,6 @@ void loop()
       Serial.println("Tutup terbuka. Menunggu...");
     }
   }
-
   else if (binState == OPEN)
   {
     if (currentMillis - actionTimestamp >= HOLD_TIME)
@@ -314,10 +285,11 @@ void loop()
 
     Serial.print("Jarak Sampah (Filtered): ");
     Serial.print(capacityDistance);
-    Serial.print(" cm | ");
-    Serial.printf("Kapasitas: %.1f%%\n", percentage);
+    Serial.print(" cm | Kapasitas: ");
+    Serial.print(percentage);
+    Serial.println("%");
 
-    client.publish(topic_capacity, String(percentage, 1).c_str());
+    Blynk.virtualWrite(V1, percentage);
   }
 
   delay(20);
