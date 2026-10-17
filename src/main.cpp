@@ -148,9 +148,6 @@ void checkPickupButton()
 
         Blynk.virtualWrite(V3, 1);
         Blynk.virtualWrite(V1, 0.0);
-
-        delay(100);
-        Blynk.virtualWrite(V3, 0);
       }
     }
   }
