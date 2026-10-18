@@ -148,6 +148,7 @@ void checkPickupButton()
 
         Blynk.virtualWrite(V3, 1);
         Blynk.virtualWrite(V1, 0.0);
+        Blynk.virtualWrite(V5, BIN_DEPTH_MAX);
       }
     }
   }
@@ -287,6 +288,7 @@ void loop()
     Serial.println("%");
 
     Blynk.virtualWrite(V1, percentage);
+    Blynk.virtualWrite(V5, capacityDistance);
   }
 
   delay(20);
