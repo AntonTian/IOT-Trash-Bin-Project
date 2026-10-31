@@ -1,7 +1,5 @@
 // Blynk Credentials
-#define BLYNK_TEMPLATE_ID "-"
-#define BLYNK_TEMPLATE_NAME "-"
-#define BLYNK_AUTH_TOKEN "-"
+#include "secrets.h"
 #define BLYNK_PRINT Serial
 
 #include <Arduino.h>
@@ -16,7 +14,7 @@ const int echoPinHand = 18;
 const int trigPinBin = 17;
 const int echoPinBin = 16;
 const int servoPin = 21;
-const int buttonPin = 22;
+const int buttonPin = 27; 
 const int ledRed = 13;
 const int ledGreen = 12;
 const int ledBlue = 14;
@@ -24,10 +22,10 @@ const int ledBlue = 14;
 Servo binServo;
 
 // Konfigurasi kecepatan servo
-const int SLOW_OPEN_SPEED = 0;
-const int SLOW_CLOSE_SPEED = 180;
+const int SLOW_OPEN_SPEED = 100;
+const int SLOW_CLOSE_SPEED = 100;
 const int STOP_MOTOR = 90;
-const int SPIN_TIME = 1500;
+const int SPIN_TIME = 1300;
 const int HOLD_TIME = 1500;
 
 enum BinState
@@ -42,11 +40,9 @@ BinState binState = CLOSED;
 unsigned long actionTimestamp = 0;
 int openCounter = 0;
 
-// variabel debounce tombol pickup
-int buttonState = HIGH;
-int lastFlickerableState = HIGH;
-unsigned long lastDebounceTime = 0;
-const unsigned long debounceDelay = 50;
+// Variabel untuk mendeteksi perubahan state TTP223 (Edge Detection)
+// Asumsi TTP223 default: LOW saat tidak disentuh, HIGH saat disentuh
+int lastButtonState = LOW; 
 
 // threshold sensor ultrasonik
 const float DISTANCE_HAND_OPEN = 15.0;
@@ -122,36 +118,26 @@ void setLedColor(int r, int g, int b)
   digitalWrite(ledBlue, b);
 }
 
-// Pickup button function
+// Pickup button function dirombak total
 void checkPickupButton()
 {
-  unsigned long currentMillis = millis();
   int currentState = digitalRead(buttonPin);
 
-  if (currentState != lastFlickerableState)
+  // Cek apakah ada perubahan dari tidak disentuh (LOW) menjadi disentuh (HIGH)
+  if (currentState == HIGH && lastButtonState == LOW)
   {
-    lastDebounceTime = currentMillis;
-    lastFlickerableState = currentState;
+    Serial.println("====== Sampah telah diambil! ======");
+
+    percentage = 0.0;
+    setLedColor(0, 1, 0);
+
+    Blynk.virtualWrite(V3, 1);
+    Blynk.virtualWrite(V1, 0.0);
+    Blynk.virtualWrite(V5, BIN_DEPTH_MAX);
   }
-
-  if ((currentMillis - lastDebounceTime) > debounceDelay)
-  {
-    if (currentState != buttonState)
-    {
-      buttonState = currentState;
-      if (buttonState == LOW)
-      {
-        Serial.println("====== Sampah telah diambil! ======");
-
-        percentage = 0.0;
-        setLedColor(0, 1, 0);
-
-        Blynk.virtualWrite(V3, 1);
-        Blynk.virtualWrite(V1, 0.0);
-        Blynk.virtualWrite(V5, BIN_DEPTH_MAX);
-      }
-    }
-  }
+  
+  // Simpan state saat ini untuk perbandingan di loop berikutnya
+  lastButtonState = currentState;
 }
 
 void setup()
@@ -162,7 +148,7 @@ void setup()
   pinMode(echoPinHand, INPUT);
   pinMode(trigPinBin, OUTPUT);
   pinMode(echoPinBin, INPUT);
-  pinMode(buttonPin, INPUT_PULLUP);
+  pinMode(buttonPin, INPUT);
 
   pinMode(ledRed, OUTPUT);
   pinMode(ledGreen, OUTPUT);
