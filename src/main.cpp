@@ -22,8 +22,8 @@ const int ledBlue = 14;
 Servo binServo;
 
 // Konfigurasi kecepatan servo
-const int SLOW_OPEN_SPEED = 100;
-const int SLOW_CLOSE_SPEED = 100;
+const int SLOW_OPEN_SPEED = 0;
+const int SLOW_CLOSE_SPEED = 180;
 const int STOP_MOTOR = 90;
 const int SPIN_TIME = 1300;
 const int HOLD_TIME = 1500;
