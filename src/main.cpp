@@ -118,7 +118,7 @@ void setLedColor(int r, int g, int b)
   digitalWrite(ledBlue, b);
 }
 
-// Pickup button function dirombak total
+// Pickup button function
 void checkPickupButton()
 {
   int currentState = digitalRead(buttonPin);
